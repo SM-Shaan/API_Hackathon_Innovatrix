@@ -4,6 +4,8 @@ A bulletproof, scalable donation platform built with modern microservices archit
 
 > 📖 **New to this project?** Start with **[QUICK_START.md](./QUICK_START.md)** for a simple, step-by-step guide to running and testing the platform.
 
+
+![CareForAll Architecture](assets/photo_2025-11-21_17-28-33.jpg)
 ## 🚀 One-Click Startup
 
 ### **Option 1: Use the startup script**
