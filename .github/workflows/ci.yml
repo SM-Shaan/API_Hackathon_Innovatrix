@@ -54,8 +54,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/user-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/user-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
@@ -73,8 +73,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/campaign-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/campaign-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
@@ -92,8 +92,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/pledge-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/pledge-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
@@ -111,8 +111,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/payment-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/payment-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
@@ -130,8 +130,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/totals-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/totals-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
@@ -149,8 +149,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: services/notification-service/package-lock.json
-      - run: npm ci
+          cache-dependency-path: services/notification-service/package.json
+      - run: npm install
       - run: npm run build
       - run: npm test
         continue-on-error: true
