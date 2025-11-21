@@ -5,6 +5,16 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_all_tests:
+        description: 'Run all service tests (for showcase)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   detect-changes:
@@ -57,7 +67,7 @@ jobs:
 
   test-shared:
     needs: detect-changes
-    if: needs.detect-changes.outputs.shared == 'true'
+    if: needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -75,7 +85,7 @@ jobs:
 
   test-user-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.user-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.user-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -93,7 +103,7 @@ jobs:
 
   test-campaign-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.campaign-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.campaign-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -111,7 +121,7 @@ jobs:
 
   test-pledge-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.pledge-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.pledge-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -129,7 +139,7 @@ jobs:
 
   test-payment-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.payment-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.payment-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -147,7 +157,7 @@ jobs:
 
   test-totals-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.totals-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.totals-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -165,7 +175,7 @@ jobs:
 
   test-notification-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.notification-service == 'true' || needs.detect-changes.outputs.shared == 'true')
+    if: always() && (needs.detect-changes.outputs.notification-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -192,7 +202,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build User Service
-        if: ${{ needs.detect-changes.outputs.user-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.user-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/user-service
@@ -200,7 +210,7 @@ jobs:
           tags: careforall/user-service:${{ github.sha }}
 
       - name: Build Campaign Service
-        if: ${{ needs.detect-changes.outputs.campaign-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.campaign-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/campaign-service
@@ -208,7 +218,7 @@ jobs:
           tags: careforall/campaign-service:${{ github.sha }}
 
       - name: Build Pledge Service
-        if: ${{ needs.detect-changes.outputs.pledge-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.pledge-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/pledge-service
@@ -216,7 +226,7 @@ jobs:
           tags: careforall/pledge-service:${{ github.sha }}
 
       - name: Build Payment Service
-        if: ${{ needs.detect-changes.outputs.payment-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.payment-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/payment-service
@@ -224,7 +234,7 @@ jobs:
           tags: careforall/payment-service:${{ github.sha }}
 
       - name: Build Totals Service
-        if: ${{ needs.detect-changes.outputs.totals-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.totals-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/totals-service
@@ -232,7 +242,7 @@ jobs:
           tags: careforall/totals-service:${{ github.sha }}
 
       - name: Build Notification Service
-        if: ${{ needs.detect-changes.outputs.notification-service == 'true' }}
+        if: ${{ needs.detect-changes.outputs.notification-service == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./services/notification-service
@@ -240,7 +250,7 @@ jobs:
           tags: careforall/notification-service:${{ github.sha }}
 
       - name: Build Gateway
-        if: ${{ needs.detect-changes.outputs.gateway == 'true' }}
+        if: ${{ needs.detect-changes.outputs.gateway == 'true' || github.event.inputs.run_all_tests == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./gateway
