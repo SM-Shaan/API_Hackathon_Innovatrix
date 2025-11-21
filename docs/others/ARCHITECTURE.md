@@ -5,43 +5,51 @@ A fault-tolerant donation platform designed to handle 1000+ requests/second with
 
 ## Architecture Diagram
 
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TB
+    Users["👥 Users<br>Donors &amp; Admins"] --> Gateway["🚪 API Gateway<br>Rate Limiting + Auth + Routing"]
+    Gateway --> UserSvc["👤 User Service<br>Auth &amp; Registration"] & CampaignSvc["📋 Campaign Service<br>Campaign Management"] & PledgeSvc["💝 Pledge Service<br>Donation Logic"]
+    UserSvc --> UserDB[("👤 User DB")] & Redis["🔴 Redis Cache<br>Sessions + Totals + Idempotency"]
+    CampaignSvc --> CampaignDB[("📋 Campaign DB")] & Redis & Kafka["📡 Kafka Event Bus<br>Async Events"]
+    PledgeSvc --> PledgeDB[("💝 Pledge DB")] & PaymentSvc["💰 Payment Service<br>Payment + Wallet APIs"] & Redis & Kafka
+    PaymentSvc --> PaymentDB[("💰 Payment DB")] & WalletDB[("💳 Wallet DB<br>Users + Transactions")] & Kafka
+    TotalsSvc["📊 Totals Service<br>Real-time Analytics"] --> TotalsDB[("📊 Totals DB")] & Redis
+    Kafka --> TotalsSvc & NotificationSvc["📧 Notification Service<br>Email &amp; Alerts"]
+    UserSvc -.-> Prometheus["📈 Prometheus<br>Metrics Collection"]
+    CampaignSvc -.-> Prometheus
+    PledgeSvc -.-> Prometheus
+    PaymentSvc -.-> Prometheus
+    TotalsSvc -.-> Prometheus
+    Prometheus --> Grafana["📊 Grafana<br>Dashboards"]
+    Jaeger["🔍 Jaeger<br>Distributed Tracing"]
+     Users:::externalBox
+     Gateway:::externalBox
+     UserSvc:::serviceBox
+     CampaignSvc:::serviceBox
+     PledgeSvc:::serviceBox
+     UserDB:::dataBox
+     Redis:::infraBox
+     CampaignDB:::dataBox
+     Kafka:::infraBox
+     PledgeDB:::dataBox
+     PaymentSvc:::serviceBox
+     PaymentDB:::dataBox
+     WalletDB:::dataBox
+     TotalsSvc:::serviceBox
+     TotalsDB:::dataBox
+     NotificationSvc:::serviceBox
+     Prometheus:::infraBox
+     Grafana:::infraBox
+     Jaeger:::infraBox
+    classDef serviceBox fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000000
+    classDef dataBox fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000000
+    classDef infraBox fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px,color:#000000
+    classDef externalBox fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000000
 ```
-                                    ┌─────────────────┐
-                                    │   Frontend      │
-                                    │   (React/Vue)   │
-                                    └────────┬────────┘
-                                             │
-                                             ▼
-                                    ┌─────────────────┐
-                                    │   API Gateway   │
-                                    │   (Nginx/Kong)  │
-                                    │   Port: 8080    │
-                                    └────────┬────────┘
-                                             │
-           ┌─────────────┬─────────────┬─────┴─────┬─────────────┬─────────────┐
-           ▼             ▼             ▼           ▼             ▼             ▼
-    ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
-    │   User     │ │  Campaign  │ │   Pledge   │ │  Payment   │ │   Totals   │ │Notification│
-    │  Service   │ │  Service   │ │  Service   │ │  Service   │ │  Service   │ │  Service   │
-    │  :3001     │ │  :3002     │ │  :3003     │ │  :3004     │ │  :3005     │ │  :3006     │
-    └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘
-          │              │              │              │              │              │
-          └──────────────┴──────────────┴──────┬───────┴──────────────┴──────────────┘
-                                               │
-                                               ▼
-                              ┌─────────────────────────────────┐
-                              │         Message Queue           │
-                              │      (Redis/RabbitMQ)           │
-                              └─────────────────────────────────┘
-                                               │
-           ┌───────────────────────────────────┼───────────────────────────────────┐
-           ▼                                   ▼                                   ▼
-    ┌────────────┐                      ┌────────────┐                      ┌────────────┐
-    │ PostgreSQL │                      │   Redis    │                      │Elasticsearch│
-    │  Database  │                      │   Cache    │                      │   Logs     │
-    └────────────┘                      └────────────┘                      └────────────┘
-```
-
 ## Core Services
 
 ### 1. API Gateway (Port 8080)

@@ -57,17 +57,17 @@ sequenceDiagram
     participant CampaignSvc as Campaign Service
     participant CampaignDB as Campaign Database
     participant Redis
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant TotalsSvc as Totals Service
-    
+
     Admin->>Gateway: POST /api/v1/campaigns (JWT)
     Gateway->>Gateway: Validate JWT & Admin role
     Gateway->>CampaignSvc: Forward request
     CampaignSvc->>CampaignSvc: Generate campaign ID
     CampaignSvc->>CampaignDB: INSERT INTO campaigns
     CampaignSvc->>Redis: Cache campaign data
-    CampaignSvc->>Kafka: Publish "CampaignCreated" event
-    Kafka->>TotalsSvc: Consume event
+    CampaignSvc->>RedisPubSub: Publish "CampaignCreated" event
+    RedisPubSub->>TotalsSvc: Consume event
     TotalsSvc->>Redis: Initialize campaign totals (0)
     TotalsSvc->>TotalsSvc: Create read model entry
     CampaignSvc-->>Gateway: Campaign created
@@ -123,7 +123,7 @@ sequenceDiagram
     participant Redis
     participant PledgeDB as Pledge Database
     participant PaymentDB as Payment Database
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     
     Donor->>Gateway: POST /api/v1/pledges (Idempotency-Key)
     Gateway->>Gateway: Rate limiting & authentication
@@ -159,8 +159,8 @@ sequenceDiagram
     participant StripeAPI as Stripe API
     participant PaymentDB as Payment Database
     participant CircuitBreaker
-    participant Kafka
-    
+    participant RedisPubSub as Redis Pub/Sub
+
     PledgeSvc->>PaymentSvc: processPayment(pledgeData)
     PaymentSvc->>PaymentSvc: Validate payment data
     
@@ -173,17 +173,17 @@ sequenceDiagram
             StripeAPI-->>PaymentSvc: Payment authorized
             PaymentSvc->>PaymentSvc: StateMachine.transition(PENDING → AUTHORIZED)
             PaymentSvc->>PaymentDB: UPDATE payments SET state=AUTHORIZED
-            PaymentSvc->>Kafka: Publish "PaymentAuthorized" event
+            PaymentSvc->>RedisPubSub: Publish "PaymentAuthorized" event
         else Stripe Failure
             StripeAPI-->>PaymentSvc: Payment failed
             PaymentSvc->>PaymentSvc: StateMachine.transition(PENDING → FAILED)
             PaymentSvc->>PaymentDB: UPDATE payments SET state=FAILED
-            PaymentSvc->>Kafka: Publish "PaymentFailed" event
+            PaymentSvc->>RedisPubSub: Publish "PaymentFailed" event
             PaymentSvc->>CircuitBreaker: Record failure
         end
     else Circuit OPEN
         PaymentSvc-->>PledgeSvc: Service unavailable error
-        PaymentSvc->>Kafka: Publish "PaymentServiceUnavailable" event
+        PaymentSvc->>RedisPubSub: Publish "PaymentServiceUnavailable" event
     end
 ```
 
@@ -195,8 +195,8 @@ sequenceDiagram
     participant Redis
     participant PaymentDB as Payment Database
     participant StateMachine
-    participant Kafka
-    
+    participant RedisPubSub as Redis Pub/Sub
+
     StripeWebhook->>PaymentSvc: POST /webhooks/payment (webhook-id header)
     PaymentSvc->>PaymentSvc: Verify webhook signature
     
@@ -212,7 +212,7 @@ sequenceDiagram
             PaymentSvc->>PaymentDB: UPDATE payment state
             PaymentSvc->>PaymentDB: INSERT INTO payment_transitions
             PaymentSvc->>Redis: Mark webhook as processed
-            PaymentSvc->>Kafka: Publish state change event
+            PaymentSvc->>RedisPubSub: Publish state change event
             PaymentSvc-->>StripeWebhook: 200 OK
         else Invalid transition
             PaymentSvc->>PaymentSvc: Log transition error
@@ -230,15 +230,15 @@ sequenceDiagram
 sequenceDiagram
     participant OutboxWorker as Outbox Publisher
     participant PledgeDB as Pledge Database
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant Redis
-    
-    loop Every 100ms
+
+    loop Every 1 second
         OutboxWorker->>PledgeDB: SELECT unprocessed events
         PledgeDB-->>OutboxWorker: Event batch (max 100)
-        
+
         loop For each event
-            OutboxWorker->>Kafka: Publish event
+            OutboxWorker->>RedisPubSub: Publish event
             alt Publish success
                 OutboxWorker->>PledgeDB: UPDATE processed_at = NOW()
                 OutboxWorker->>Redis: Update metrics
@@ -252,26 +252,26 @@ sequenceDiagram
 ### 4.2 Real-time Totals Update (Read Model)
 ```mermaid
 sequenceDiagram
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant TotalsSvc as Totals Service
     participant Redis
     participant TotalsDB as Totals Database
-    
-    Kafka->>TotalsSvc: "PledgeCreated" event
+
+    RedisPubSub->>TotalsSvc: "PledgeCreated" event
     TotalsSvc->>TotalsSvc: Extract campaign_id & amount
-    
+
     TotalsSvc->>Redis: HINCRBYFLOAT campaign:X:total amount
     TotalsSvc->>Redis: HINCRBY campaign:X:count 1
-    
+
     TotalsSvc->>TotalsDB: INSERT/UPDATE campaign_totals
     TotalsSvc->>TotalsSvc: Update real-time dashboard
-    
-    Kafka->>TotalsSvc: "PaymentCompleted" event
+
+    RedisPubSub->>TotalsSvc: "PaymentCompleted" event
     TotalsSvc->>TotalsSvc: Mark pledge as completed
     TotalsSvc->>Redis: SADD campaign:X:completed pledge_id
     TotalsSvc->>TotalsDB: UPDATE completed_pledges count
-    
-    Kafka->>TotalsSvc: "PaymentFailed" event
+
+    RedisPubSub->>TotalsSvc: "PaymentFailed" event
     TotalsSvc->>Redis: HINCRBYFLOAT campaign:X:total -amount
     TotalsSvc->>Redis: HINCRBY campaign:X:count -1
     TotalsSvc->>TotalsDB: UPDATE failed_pledges count
@@ -293,9 +293,9 @@ sequenceDiagram
     participant TotalsSvc as Totals Service
     participant NotificationSvc as Notification Service
     participant StripeAPI as Stripe API
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant Redis
-    
+
     Donor->>Frontend: Visit campaign page
     Frontend->>Gateway: GET /api/v1/campaigns/:id
     Gateway->>CampaignSvc: Get campaign details
@@ -313,30 +313,30 @@ sequenceDiagram
     PledgeSvc->>PaymentSvc: Process payment
     PaymentSvc->>StripeAPI: Create payment intent
     StripeAPI-->>PaymentSvc: Payment authorized
-    PaymentSvc->>Kafka: "PaymentAuthorized" event
-    
+    PaymentSvc->>RedisPubSub: "PaymentAuthorized" event
+
     PledgeSvc-->>Gateway: Donation created (processing)
     Gateway-->>Frontend: 201 Created
     Frontend-->>Donor: "Thank you! Processing payment..."
-    
+
     Note over StripeAPI: Async webhook processing
     StripeAPI->>PaymentSvc: Webhook: payment.captured
     PaymentSvc->>PaymentSvc: Transition(AUTHORIZED → CAPTURED)
-    PaymentSvc->>Kafka: "PaymentCaptured" event
-    
+    PaymentSvc->>RedisPubSub: "PaymentCaptured" event
+
     StripeAPI->>PaymentSvc: Webhook: payment.succeeded
     PaymentSvc->>PaymentSvc: Transition(CAPTURED → COMPLETED)
-    PaymentSvc->>Kafka: "PaymentCompleted" event
-    
-    Kafka->>TotalsSvc: Update campaign totals
+    PaymentSvc->>RedisPubSub: "PaymentCompleted" event
+
+    RedisPubSub->>TotalsSvc: Update campaign totals
     TotalsSvc->>Redis: Increment totals
     TotalsSvc->>Frontend: WebSocket update (real-time)
     Frontend-->>Donor: Live total update
-    
-    Kafka->>NotificationSvc: Send confirmation
+
+    RedisPubSub->>NotificationSvc: Send confirmation
     NotificationSvc->>Donor: Email confirmation
-    
-    Kafka->>NotificationSvc: Notify campaign owner
+
+    RedisPubSub->>NotificationSvc: Notify campaign owner
     NotificationSvc->>NotificationSvc: Send campaign update email
 ```
 
@@ -352,20 +352,20 @@ sequenceDiagram
     participant PledgeSvc as Pledge Service
     participant PaymentSvc as Payment Service (DOWN)
     participant CircuitBreaker
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant NotificationSvc as Notification Service
-    
+
     Donor->>Gateway: POST /api/v1/pledges
     Gateway->>PledgeSvc: Process donation
     PledgeSvc->>PledgeSvc: Create pledge (PENDING)
     PledgeSvc->>CircuitBreaker: Check payment service
     CircuitBreaker-->>PledgeSvc: CIRCUIT OPEN - Service down
-    
-    PledgeSvc->>Kafka: "PaymentServiceUnavailable" event
+
+    PledgeSvc->>RedisPubSub: "PaymentServiceUnavailable" event
     PledgeSvc-->>Gateway: 503 Service Temporarily Unavailable
     Gateway-->>Donor: "Payment system temporarily down, please try again"
-    
-    Kafka->>NotificationSvc: Alert admins
+
+    RedisPubSub->>NotificationSvc: Alert admins
     NotificationSvc->>NotificationSvc: Send ops team alert
     
     Note over PaymentSvc: Service recovers
@@ -608,23 +608,23 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant PledgeSvc as Pledge Service
-    participant Kafka
+    participant RedisPubSub as Redis Pub/Sub
     participant TotalsSvc as Totals Service
     participant Redis
     participant CampaignOwner as Campaign Owner
-    
-    PledgeSvc->>Kafka: "PledgeCompleted" event
-    Note over Kafka: Message temporarily fails to deliver
-    
+
+    PledgeSvc->>RedisPubSub: "PledgeCompleted" event
+    Note over RedisPubSub: Message temporarily fails to deliver
+
     TotalsSvc->>Redis: Current total = $1000
     CampaignOwner->>CampaignOwner: Views campaign showing $1000
-    
-    Note over Kafka: Message delivery retries (Kafka guaranteed delivery)
-    Kafka->>TotalsSvc: "PledgeCompleted" event (delayed)
+
+    Note over RedisPubSub: Outbox pattern ensures retry (guaranteed delivery)
+    RedisPubSub->>TotalsSvc: "PledgeCompleted" event (delayed)
     TotalsSvc->>Redis: Update total = $1150
     TotalsSvc->>TotalsSvc: Send WebSocket update
     CampaignOwner->>CampaignOwner: Real-time update to $1150
-    
+
     Note over TotalsSvc: System achieves eventual consistency
 ```
 

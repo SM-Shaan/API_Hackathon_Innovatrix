@@ -327,7 +327,7 @@ Imagine a busy supermarket with 10 checkout counters but only 1 cashier. Everyon
 
 ---
 
-### Message Queue / Pub-Sub
+### Message Queue / Pub-Sub (Redis)
 
 **Simple Explanation:**
 
@@ -338,12 +338,20 @@ You put a letter in someone's mailbox. They'll get it when they check. The lette
 The radio station broadcasts music. Anyone who's tuned in hears it. If you're not listening, you miss it.
 
 **In Our Project:**
-We use Redis Pub-Sub:
+We use **Redis Pub/Sub** (not RabbitMQ or Kafka):
 1. Pledge Service "publishes" an event: "New pledge created!"
 2. Totals Service is "subscribed" - it hears and updates totals
 3. Notification Service is "subscribed" - it hears and sends email
 
-**Where It's Used:** Redis pub/sub on "events" channel
+**Why Redis instead of dedicated message brokers:**
+- Simpler setup - already using Redis for caching
+- Lower operational overhead
+- Sufficient for our scale requirements
+- Combined with Outbox Pattern for reliability
+
+**Where It's Used:**
+- Event publishing: `services/pledge-service/src/outbox-worker.ts`
+- Event subscribing: `services/totals-service/src/event-subscriber.ts`
 
 ---
 

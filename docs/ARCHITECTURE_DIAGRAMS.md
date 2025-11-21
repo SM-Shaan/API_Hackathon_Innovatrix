@@ -24,7 +24,7 @@ flowchart TB
     end
 
     subgraph Messaging["Event Bus"]
-        RABBIT[RabbitMQ<br/>Message Broker]
+        REDIS_PUB[Redis Pub/Sub<br/>Event Channel]
     end
 
     subgraph Data["Data Layer"]
@@ -42,10 +42,10 @@ flowchart TB
     WEB & MOBILE & ADMIN --> NGINX
     NGINX --> USER & CAMPAIGN & PLEDGE & PAYMENT & TOTALS
 
-    PLEDGE --> RABBIT
-    PAYMENT --> RABBIT
-    RABBIT --> TOTALS
-    RABBIT --> NOTIF
+    PLEDGE --> REDIS_PUB
+    PAYMENT --> REDIS_PUB
+    REDIS_PUB --> TOTALS
+    REDIS_PUB --> NOTIF
 
     USER & CAMPAIGN & PLEDGE & PAYMENT --> PG
     TOTALS --> REDIS
@@ -95,7 +95,7 @@ sequenceDiagram
     participant PS as Pledge Service
     participant DB as PostgreSQL
     participant OP as Outbox Poller
-    participant MQ as RabbitMQ
+    participant MQ as Redis Pub/Sub
     participant TS as Totals Service
 
     C->>PS: POST /pledges
@@ -162,7 +162,7 @@ flowchart LR
     end
 
     subgraph Events["Event Bus"]
-        MQ[RabbitMQ]
+        MQ[Redis Pub/Sub]
     end
 
     subgraph Read["Read Side (Query)"]
@@ -196,7 +196,7 @@ sequenceDiagram
     participant PP as Payment Provider
     participant PAY as Payment Service
     participant R as Redis
-    participant MQ as RabbitMQ
+    participant MQ as Redis Pub/Sub
     participant TS as Totals Service
 
     D->>GW: POST /api/pledges
@@ -310,7 +310,7 @@ flowchart TB
 
     subgraph Async["Asynchronous (Events)"]
         direction LR
-        PS[Pledge Service] -->|Publish| QUEUE[RabbitMQ]
+        PS[Pledge Service] -->|Publish| QUEUE[Redis Pub/Sub]
         QUEUE -->|Subscribe| TS[Totals Service]
         QUEUE -->|Subscribe| NS[Notification Service]
     end
@@ -319,7 +319,7 @@ flowchart TB
         direction LR
         PS2[Pledge Service] -->|Transaction| DB2[(PostgreSQL)]
         POLL[Outbox Poller] -->|Read| DB2
-        POLL -->|Publish| QUEUE2[RabbitMQ]
+        POLL -->|Publish| QUEUE2[Redis Pub/Sub]
     end
 ```
 
@@ -359,10 +359,12 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph External["External Access"]
-        P80[Port 80]
-        P3000[Port 3000]
-        P9090[Port 9090]
-        P16686[Port 16686]
+        P8080[Port 8080 Frontend]
+        P8081[Port 8081 API Gateway]
+        P3000[Port 3000 Grafana]
+        P9090[Port 9090 Prometheus]
+        P16686[Port 16686 Jaeger]
+        P5601[Port 5601 Kibana]
     end
 
     subgraph Gateway["Load Balancer"]
@@ -375,13 +377,13 @@ flowchart TB
         PLEDGE[pledge-service x3]
         PAY[payment-service x2]
         TOTAL[totals-service x2]
+        NOTIF[notification-service x2]
     end
 
     subgraph Data["Data Services"]
-        PG[postgres:15]
-        REDIS[redis:7-alpine]
-        RABBIT[rabbitmq:3-management]
-        ES[elasticsearch:8]
+        PG[postgres:15-alpine]
+        REDIS[redis:7-alpine<br/>Cache + Pub/Sub]
+        ES[elasticsearch:8.11.0]
     end
 
     subgraph Observe["Observability"]
@@ -390,13 +392,13 @@ flowchart TB
         JAEGER[jaeger]
     end
 
-    P80 --> NGINX
-    NGINX --> USER & CAMP & PLEDGE & PAY & TOTAL
+    P8081 --> NGINX
+    P8080 --> FRONTEND[User Frontend]
+    NGINX --> USER & CAMP & PLEDGE & PAY & TOTAL & NOTIF
 
     USER & CAMP & PLEDGE & PAY --> PG
-    TOTAL & PAY --> REDIS
-    PLEDGE & PAY --> RABBIT
-    RABBIT --> TOTAL
+    TOTAL & PAY & PLEDGE --> REDIS
+    REDIS -.->|Pub/Sub| TOTAL & NOTIF
 
     Core --> PROM --> GRAF
     Core --> JAEGER
@@ -405,6 +407,7 @@ flowchart TB
     P3000 --> GRAF
     P9090 --> PROM
     P16686 --> JAEGER
+    P5601 --> KIB[Kibana]
 ```
 
 ---

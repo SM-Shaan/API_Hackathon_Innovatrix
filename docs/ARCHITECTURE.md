@@ -40,7 +40,7 @@
       │              │              │              │              │              │
       ▼              ▼              ▼              ▼              ▼              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              MESSAGE BROKER (RabbitMQ/Redis)                             │
+│                              EVENT BUS (Redis Pub/Sub)                                   │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐    │
 │  │ pledge.created  │  │ payment.success │  │ payment.failed  │  │ campaign.update │    │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘    │
@@ -72,7 +72,7 @@
 │         ▼                                                               │
 │   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐             │
 │   │ Rate Limit  │────▶│ Auth Check  │────▶│  Route to   │             │
-│   │ (1000 r/s)  │     │ (JWT Valid) │     │  Service    │             │
+│   │ (100 r/s)   │     │ (JWT Valid) │     │  Service    │             │
 │   └─────────────┘     └─────────────┘     └─────────────┘             │
 │                                                  │                      │
 │         ┌────────────────┬───────────────┬──────┴────────┐             │
@@ -615,50 +615,59 @@ GET    /api/admin/metrics           - View system metrics
 ```yaml
 # Simplified view of service scaling
 services:
+  # User Frontend
+  user-frontend:
+    build: ./user-frontend
+    ports: ["8080:80"]
+
   # Gateway
-  nginx:
-    image: nginx:alpine
-    ports: ["80:80"]
-    depends_on: [user-service, campaign-service, pledge-service]
+  gateway:
+    build: ./gateway
+    ports: ["8081:80"]
+    depends_on: [user-service, campaign-service, pledge-service, payment-service, totals-service, notification-service]
 
   # Core Services (scalable)
   user-service:
-    build: ./services/user
+    build: ./services/user-service
     deploy:
       replicas: 2
     environment:
-      - DATABASE_URL=postgres://...
+      - PORT=3001
+      - DB_HOST=postgres
+      - REDIS_URL=redis://redis:6379
 
   campaign-service:
-    build: ./services/campaign
+    build: ./services/campaign-service
     deploy:
       replicas: 2
 
   pledge-service:
-    build: ./services/pledge
+    build: ./services/pledge-service
     deploy:
       replicas: 3  # Higher load expected
 
   payment-service:
-    build: ./services/payment
+    build: ./services/payment-service
     deploy:
       replicas: 2
 
   totals-service:
-    build: ./services/totals
+    build: ./services/totals-service
+    deploy:
+      replicas: 2
+
+  notification-service:
+    build: ./services/notification-service
     deploy:
       replicas: 2
 
   # Data Layer
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     volumes: [postgres_data:/var/lib/postgresql/data]
 
   redis:
-    image: redis:7-alpine
-
-  rabbitmq:
-    image: rabbitmq:3-management
+    image: redis:7-alpine  # Used for cache + pub/sub messaging
 
   # Observability
   prometheus:
@@ -672,6 +681,12 @@ services:
 
   elasticsearch:
     image: elasticsearch:8.11.0
+
+  kibana:
+    image: kibana:8.11.0
+
+  filebeat:
+    image: filebeat:8.11.0
 ```
 
 ---
@@ -685,7 +700,7 @@ services:
 | Out-of-order webhook events | State machine + sequence numbers |
 | Totals endpoint overload | CQRS with pre-computed read model |
 | Service crash mid-transaction | Atomic DB transactions + retry |
-| Message queue unavailable | Outbox poller with exponential backoff |
+| Redis pub/sub unavailable | Outbox poller with exponential backoff |
 | Redis cache failure | Fallback to materialized view |
 | Network partition | Saga pattern for distributed transactions |
 
@@ -709,11 +724,11 @@ services:
                     Shared State Layer
            ┌───────────────┼───────────────┐
            │               │               │
-           ▼               ▼               ▼
-    ┌────────────┐  ┌────────────┐  ┌────────────┐
-    │ PostgreSQL │  │   Redis    │  │  RabbitMQ  │
-    │ (Primary)  │  │ (Cluster)  │  │ (Cluster)  │
-    └────────────┘  └────────────┘  └────────────┘
+           ▼               ▼
+    ┌────────────┐  ┌──────────────────────────┐
+    │ PostgreSQL │  │         Redis            │
+    │ (Primary)  │  │ (Cache + Pub/Sub Events) │
+    └────────────┘  └──────────────────────────┘
 
 Docker Compose Scaling:
   docker-compose up --scale pledge-service=5 --scale payment-service=3
