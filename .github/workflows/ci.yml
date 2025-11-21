@@ -10,17 +10,19 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      user-service: ${{ steps.changes.outputs.user-service == 'true' || steps.changes.outputs.shared == 'true' }}
-      campaign-service: ${{ steps.changes.outputs.campaign-service == 'true' || steps.changes.outputs.shared == 'true' }}
-      pledge-service: ${{ steps.changes.outputs.pledge-service == 'true' || steps.changes.outputs.shared == 'true' }}
-      payment-service: ${{ steps.changes.outputs.payment-service == 'true' || steps.changes.outputs.shared == 'true' }}
-      totals-service: ${{ steps.changes.outputs.totals-service == 'true' || steps.changes.outputs.shared == 'true' }}
-      notification-service: ${{ steps.changes.outputs.notification-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      user-service: ${{ steps.changes.outputs.user-service }}
+      campaign-service: ${{ steps.changes.outputs.campaign-service }}
+      pledge-service: ${{ steps.changes.outputs.pledge-service }}
+      payment-service: ${{ steps.changes.outputs.payment-service }}
+      totals-service: ${{ steps.changes.outputs.totals-service }}
+      notification-service: ${{ steps.changes.outputs.notification-service }}
       shared: ${{ steps.changes.outputs.shared }}
       gateway: ${{ steps.changes.outputs.gateway }}
       frontend: ${{ steps.changes.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -43,10 +45,19 @@ jobs:
               - 'gateway/**'
             frontend:
               - 'frontend/**'
+      - name: Debug outputs
+        run: |
+          echo "shared: ${{ steps.changes.outputs.shared }}"
+          echo "user-service: ${{ steps.changes.outputs.user-service }}"
+          echo "campaign-service: ${{ steps.changes.outputs.campaign-service }}"
+          echo "pledge-service: ${{ steps.changes.outputs.pledge-service }}"
+          echo "payment-service: ${{ steps.changes.outputs.payment-service }}"
+          echo "totals-service: ${{ steps.changes.outputs.totals-service }}"
+          echo "notification-service: ${{ steps.changes.outputs.notification-service }}"
 
   test-shared:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.shared == 'true' }}
+    if: needs.detect-changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,7 +75,7 @@ jobs:
 
   test-user-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.user-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.user-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,7 +93,7 @@ jobs:
 
   test-campaign-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.campaign-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.campaign-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -100,7 +111,7 @@ jobs:
 
   test-pledge-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.pledge-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.pledge-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -118,7 +129,7 @@ jobs:
 
   test-payment-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.payment-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.payment-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -136,7 +147,7 @@ jobs:
 
   test-totals-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.totals-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.totals-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -154,7 +165,7 @@ jobs:
 
   test-notification-service:
     needs: [detect-changes, test-shared]
-    if: ${{ always() && needs.detect-changes.outputs.notification-service == 'true' }}
+    if: always() && (needs.detect-changes.outputs.notification-service == 'true' || needs.detect-changes.outputs.shared == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
