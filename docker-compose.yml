@@ -1,11 +1,23 @@
 version: '3.8'
 
 services:
+  # User Frontend (Main Application)
+  user-frontend:
+    build: ./user-frontend
+    ports:
+      - "8080:80"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8081/api
+    networks:
+      - careforall-network
+    restart: unless-stopped
+
+
   # API Gateway
   gateway:
     build: ./gateway
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - user-service
       - campaign-service
@@ -13,8 +25,6 @@ services:
       - payment-service
       - totals-service
       - notification-service
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
     networks:
       - careforall-network
     restart: unless-stopped

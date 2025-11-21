@@ -1,0 +1,484 @@
+###
+# CareForAll Donation Platform API Testing
+# Use with VS Code REST Client extension or similar HTTP client
+###
+
+@baseUrl = http://localhost:8081/api
+@adminToken = 
+@userToken = 
+@campaignId = 
+@pledgeId = 
+@paymentId = 
+
+###
+# 1. AUTHENTICATION & USER MANAGEMENT
+###
+
+### Register New User
+POST {{baseUrl}}/users/register
+Content-Type: application/json
+
+{
+  "email": "donor@example.com",
+  "password": "password123",
+  "name": "John Donor"
+}
+
+### Login User (Save token for @userToken)
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "donor@example.com",
+  "password": "password123"
+}
+
+### Login Admin (Save token for @adminToken) 
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@careforall.com",
+  "password": "admin123"
+}
+
+### Get Current User Profile
+GET {{baseUrl}}/users/profile
+Authorization: Bearer {{userToken}}
+
+### Update User Profile
+PUT {{baseUrl}}/users/profile
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "name": "John Updated Donor",
+  "phone": "+1234567890"
+}
+
+###
+# 2. CAMPAIGN MANAGEMENT
+###
+
+### Create Campaign (Admin Only) - Save campaignId from response
+POST {{baseUrl}}/campaigns
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "title": "Help Flood Victims",
+  "description": "Emergency relief for flood-affected families in Bangladesh. Your donation will provide food, shelter, and medical aid.",
+  "goal": 50000,
+  "category": "EMERGENCY",
+  "end_date": "2024-12-31T23:59:59Z",
+  "image_url": "https://example.com/flood-relief.jpg"
+}
+
+### Get All Campaigns
+GET {{baseUrl}}/campaigns
+Authorization: Bearer {{userToken}}
+
+### Get Campaign by ID
+GET {{baseUrl}}/campaigns/{{campaignId}}
+Authorization: Bearer {{userToken}}
+
+### Update Campaign (Admin Only)
+PUT {{baseUrl}}/campaigns/{{campaignId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "title": "Help Flood Victims - Updated",
+  "description": "Updated description with more details",
+  "goal": 75000
+}
+
+### Get Campaign Totals (Real-time)
+GET {{baseUrl}}/campaigns/{{campaignId}}/totals
+Authorization: Bearer {{userToken}}
+
+### Get Campaign Donations
+GET {{baseUrl}}/campaigns/{{campaignId}}/donations
+Authorization: Bearer {{userToken}}
+
+###
+# 3. DONATION FLOW WITH IDEMPOTENCY
+###
+
+### Create Pledge (Test Idempotency) - Save pledgeId from response
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: test-key-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "John Donor",
+  "donor_email": "donor@example.com",
+  "anonymous": false,
+  "message": "Hope this helps!"
+}
+
+### Test Idempotency - Same Request (Should return same response)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: test-key-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "John Donor",
+  "donor_email": "donor@example.com",
+  "anonymous": false,
+  "message": "Hope this helps!"
+}
+
+### Create Another Pledge (Different Idempotency Key)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: test-key-002
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 250,
+  "donor_name": "Jane Smith",
+  "donor_email": "jane@example.com",
+  "anonymous": true
+}
+
+### Create Large Pledge
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: test-key-003
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 1000,
+  "donor_name": "Big Donor Corp",
+  "donor_email": "corp@example.com",
+  "anonymous": false,
+  "message": "Corporate sponsorship"
+}
+
+### Get User's Pledges
+GET {{baseUrl}}/pledges/my-pledges
+Authorization: Bearer {{userToken}}
+
+### Get Pledge Details
+GET {{baseUrl}}/pledges/{{pledgeId}}
+Authorization: Bearer {{userToken}}
+
+###
+# 4. PAYMENT STATE MACHINE TESTING
+###
+
+### Simulate Payment Authorization Webhook
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_auth_001",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_test_12345",
+  "amount": 100,
+  "metadata": {
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+### Simulate Payment Capture Webhook
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_capture_001", 
+  "event_type": "payment_intent.captured",
+  "provider": "stripe",
+  "provider_payment_id": "pi_test_12345",
+  "metadata": {
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+### Simulate Payment Completion Webhook
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_complete_001",
+  "event_type": "payment_intent.succeeded", 
+  "provider": "stripe",
+  "provider_payment_id": "pi_test_12345",
+  "metadata": {
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+### Test Invalid State Transition (Should Fail)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_invalid_001",
+  "event_type": "payment_intent.created",
+  "provider": "stripe", 
+  "provider_payment_id": "pi_test_12345"
+}
+
+### Get Payment Status
+GET {{baseUrl}}/payments/{{paymentId}}
+Authorization: Bearer {{userToken}}
+
+### Simulate Payment Failure
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_fail_001",
+  "event_type": "payment_intent.payment_failed",
+  "provider": "stripe",
+  "provider_payment_id": "pi_test_67890",
+  "failure_reason": "insufficient_funds"
+}
+
+###
+# 5. ANALYTICS & REPORTING
+###
+
+### Get Platform Statistics (Admin)
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{adminToken}}
+
+### Get Campaign Analytics
+GET {{baseUrl}}/campaigns/{{campaignId}}/analytics
+Authorization: Bearer {{adminToken}}
+
+### Get Recent Donations
+GET {{baseUrl}}/donations/recent?limit=10
+Authorization: Bearer {{userToken}}
+
+### Get Top Donors (Anonymous data)
+GET {{baseUrl}}/donors/top?limit=5
+Authorization: Bearer {{userToken}}
+
+###
+# 6. NOTIFICATION TESTING
+###
+
+### Trigger Welcome Email (Internal)
+POST {{baseUrl}}/notifications/email
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "to": "test@example.com",
+  "template": "welcome",
+  "data": {
+    "name": "Test User"
+  }
+}
+
+### Trigger Donation Confirmation Email
+POST {{baseUrl}}/notifications/email  
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "to": "donor@example.com",
+  "template": "donation_confirmation",
+  "data": {
+    "donor_name": "John Donor",
+    "amount": 100,
+    "campaign_title": "Help Flood Victims",
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+###
+# 7. SEARCH & FILTERING
+###
+
+### Search Campaigns by Title
+GET {{baseUrl}}/campaigns/search?q=flood
+Authorization: Bearer {{userToken}}
+
+### Filter Campaigns by Category
+GET {{baseUrl}}/campaigns?category=EMERGENCY
+Authorization: Bearer {{userToken}}
+
+### Filter Campaigns by Status
+GET {{baseUrl}}/campaigns?status=ACTIVE&limit=5&offset=0
+Authorization: Bearer {{userToken}}
+
+### Get Campaigns by Date Range
+GET {{baseUrl}}/campaigns?start_date=2024-01-01&end_date=2024-12-31
+Authorization: Bearer {{userToken}}
+
+###
+# 8. ERROR TESTING
+###
+
+### Test Unauthorized Access
+GET {{baseUrl}}/admin/stats
+
+### Test Invalid Campaign ID
+GET {{baseUrl}}/campaigns/invalid-id
+Authorization: Bearer {{userToken}}
+
+### Test Pledge with Invalid Amount
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: error-test-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": -50,
+  "donor_name": "Error Test",
+  "donor_email": "error@example.com"
+}
+
+### Test Pledge with Missing Required Fields
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: error-test-002
+
+{
+  "amount": 100
+}
+
+### Test Duplicate Email Registration
+POST {{baseUrl}}/users/register
+Content-Type: application/json
+
+{
+  "email": "donor@example.com",
+  "password": "newpassword",
+  "name": "Duplicate User"
+}
+
+### Test Invalid Login
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "nonexistent@example.com", 
+  "password": "wrongpassword"
+}
+
+###
+# 9. LOAD TESTING SCENARIOS
+###
+
+### Create Multiple Pledges (Run multiple times)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: load-test-{{$randomUUID}}
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": {{$randomInt 10 500}},
+  "donor_name": "Load Test Donor {{$randomInt}}",
+  "donor_email": "loadtest{{$randomInt}}@example.com",
+  "anonymous": false
+}
+
+### Rapid Payment Webhooks (Test Concurrency)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_concurrent_{{$randomUUID}}",
+  "event_type": "payment_intent.succeeded",
+  "provider": "stripe", 
+  "provider_payment_id": "pi_concurrent_{{$randomUUID}}",
+  "amount": {{$randomInt 10 1000}}
+}
+
+###
+# 10. HEALTH CHECKS
+###
+
+### API Gateway Health Check
+GET {{baseUrl}}/health
+
+### User Service Health
+GET http://localhost:8081/api/users/health
+
+### Campaign Service Health  
+GET http://localhost:8081/api/campaigns/health
+
+### Payment Service Health
+GET http://localhost:8081/api/payments/health
+
+### Pledge Service Health
+GET http://localhost:8081/api/pledges/health
+
+### Totals Service Health
+GET http://localhost:8081/api/totals/health
+
+### Notification Service Health
+GET http://localhost:8081/api/notifications/health
+
+###
+# 11. WEBSOCKET TESTING (If Implemented)
+###
+
+### Connect to Real-time Updates
+# Use WebSocket client to connect to:
+# ws://localhost:8081/ws/campaigns/{{campaignId}}/totals
+
+###
+# 12. BATCH OPERATIONS
+###
+
+### Bulk Create Campaigns (Admin)
+POST {{baseUrl}}/campaigns/bulk
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "campaigns": [
+    {
+      "title": "School Renovation Project",
+      "description": "Help renovate local schools",
+      "goal": 25000,
+      "category": "EDUCATION",
+      "end_date": "2024-11-30T23:59:59Z"
+    },
+    {
+      "title": "Medical Equipment Fund", 
+      "description": "Purchase medical equipment for rural clinic",
+      "goal": 15000,
+      "category": "HEALTH",
+      "end_date": "2024-10-31T23:59:59Z"
+    }
+  ]
+}
+
+### Bulk Process Payments (Admin)
+POST {{baseUrl}}/payments/bulk-process
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "payment_ids": ["payment1", "payment2", "payment3"],
+  "action": "process_pending"
+}
+
+###
+# NOTES:
+# 1. Replace {{variableName}} with actual values from responses
+# 2. Save tokens from login responses to use in subsequent requests
+# 3. Use VS Code REST Client extension for best experience
+# 4. Check docker logs for service responses and events
+# 5. Monitor Redis pub/sub and Grafana dashboards during testing
+# 6. Test with different user roles (USER vs ADMIN)
+###

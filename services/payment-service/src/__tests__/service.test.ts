@@ -237,7 +237,7 @@ describe('PaymentService', () => {
       });
 
       expect(result.payment.state).toBe(PaymentState.AUTHORIZED);
-      currentPayment = result.payment;
+      currentPayment = { ...result.payment, provider_payment_id: result.payment.provider_payment_id! };
       mockRepository.findByProviderPaymentId.mockResolvedValue(currentPayment);
 
       // Step 2: AUTHORIZED -> CAPTURED
@@ -250,11 +250,11 @@ describe('PaymentService', () => {
         webhook_id: 'wh-2',
         event_type: 'payment_intent.captured',
         provider: 'stripe',
-        provider_payment_id: 'pi_123',
+        provider_payment_id: currentPayment.provider_payment_id || 'pi_123',
       });
 
       expect(result.payment.state).toBe(PaymentState.CAPTURED);
-      currentPayment = result.payment;
+      currentPayment = { ...result.payment, provider_payment_id: result.payment.provider_payment_id! };
       mockRepository.findByProviderPaymentId.mockResolvedValue(currentPayment);
 
       // Step 3: CAPTURED -> COMPLETED
@@ -267,7 +267,7 @@ describe('PaymentService', () => {
         webhook_id: 'wh-3',
         event_type: 'payment_intent.succeeded',
         provider: 'stripe',
-        provider_payment_id: 'pi_123',
+        provider_payment_id: currentPayment.provider_payment_id || 'pi_123',
       });
 
       expect(result.payment.state).toBe(PaymentState.COMPLETED);
