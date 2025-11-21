@@ -10,12 +10,13 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      user-service: ${{ steps.changes.outputs.user-service }}
-      campaign-service: ${{ steps.changes.outputs.campaign-service }}
-      pledge-service: ${{ steps.changes.outputs.pledge-service }}
-      payment-service: ${{ steps.changes.outputs.payment-service }}
-      totals-service: ${{ steps.changes.outputs.totals-service }}
-      notification-service: ${{ steps.changes.outputs.notification-service }}
+      user-service: ${{ steps.changes.outputs.user-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      campaign-service: ${{ steps.changes.outputs.campaign-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      pledge-service: ${{ steps.changes.outputs.pledge-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      payment-service: ${{ steps.changes.outputs.payment-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      totals-service: ${{ steps.changes.outputs.totals-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      notification-service: ${{ steps.changes.outputs.notification-service == 'true' || steps.changes.outputs.shared == 'true' }}
+      shared: ${{ steps.changes.outputs.shared }}
       gateway: ${{ steps.changes.outputs.gateway }}
       frontend: ${{ steps.changes.outputs.frontend }}
     steps:
@@ -24,6 +25,8 @@ jobs:
         id: changes
         with:
           filters: |
+            shared:
+              - 'services/shared/**'
             user-service:
               - 'services/user-service/**'
             campaign-service:
@@ -41,9 +44,27 @@ jobs:
             frontend:
               - 'frontend/**'
 
-  test-user-service:
+  test-shared:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.user-service == 'true' }}
+    if: ${{ needs.detect-changes.outputs.shared == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/shared/package.json
+      - run: npm install
+      - run: npm run build
+      - run: npm test
+
+  test-user-service:
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.user-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,11 +79,10 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   test-campaign-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.campaign-service == 'true' }}
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.campaign-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -77,11 +97,10 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   test-pledge-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.pledge-service == 'true' }}
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.pledge-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -96,11 +115,10 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   test-payment-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.payment-service == 'true' }}
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.payment-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -115,11 +133,10 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   test-totals-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.totals-service == 'true' }}
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.totals-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -134,11 +151,10 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   test-notification-service:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.notification-service == 'true' }}
+    needs: [detect-changes, test-shared]
+    if: ${{ always() && needs.detect-changes.outputs.notification-service == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -153,10 +169,9 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
-        continue-on-error: true
 
   build-images:
-    needs: [detect-changes, test-user-service, test-campaign-service, test-pledge-service, test-payment-service, test-totals-service, test-notification-service]
+    needs: [detect-changes, test-shared, test-user-service, test-campaign-service, test-pledge-service, test-payment-service, test-totals-service, test-notification-service]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -235,7 +250,7 @@ jobs:
           docker compose config
 
   ci-success:
-    needs: [test-user-service, test-campaign-service, test-pledge-service, test-payment-service, test-totals-service, test-notification-service]
+    needs: [test-shared, test-user-service, test-campaign-service, test-pledge-service, test-payment-service, test-totals-service, test-notification-service]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -243,3 +258,10 @@ jobs:
         run: |
           echo "CI Pipeline completed"
           echo "All tests have been executed for changed services"
+          echo "Shared: ${{ needs.test-shared.result }}"
+          echo "User Service: ${{ needs.test-user-service.result }}"
+          echo "Campaign Service: ${{ needs.test-campaign-service.result }}"
+          echo "Pledge Service: ${{ needs.test-pledge-service.result }}"
+          echo "Payment Service: ${{ needs.test-payment-service.result }}"
+          echo "Totals Service: ${{ needs.test-totals-service.result }}"
+          echo "Notification Service: ${{ needs.test-notification-service.result }}"
