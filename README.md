@@ -36,57 +36,7 @@ CareForAll is a modern donation platform that enables users to create campaigns,
 
 ### High-Level System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                     CLIENTS                                              │
-│                      Web Browser  │  Mobile App  │  Admin Panel                          │
-└────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                         │
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              USER FRONTEND (Next.js)                                     │
-│                                   Port: 8080                                             │
-│              Campaign Browsing  │  Donation Form  │  Real-time Updates                   │
-└────────────────────────────────────────┬────────────────────────────────────────────────┘
-                                         │
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              API GATEWAY (Nginx)                                         │
-│                                   Port: 8081                                             │
-│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│    │ Rate Limiting│  │Load Balancing│  │ Health Check │  │   Routing    │               │
-│    │  (100 r/s)   │  │ (least_conn) │  │ (max_fails=3)│  │  (/api/*)    │               │
-│    └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │
-└───────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┬───────────┘
-        │             │             │             │             │             │
-        ▼             ▼             ▼             ▼             ▼             ▼
-┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐
-│   USER    │  │ CAMPAIGN  │  │  PLEDGE   │  │  PAYMENT  │  │  TOTALS   │  │  NOTIF    │
-│  SERVICE  │  │  SERVICE  │  │  SERVICE  │  │  SERVICE  │  │  SERVICE  │  │  SERVICE  │
-│  :3001    │  │  :3002    │  │  :3003    │  │  :3004    │  │  :3005    │  │  :3006    │
-│ ───────── │  │ ───────── │  │ ───────── │  │ ───────── │  │ ───────── │  │ ───────── │
-│ • Auth    │  │ • CRUD    │  │ • Idempt. │  │ • State   │  │ • CQRS    │  │ • Email   │
-│ • JWT     │  │ • Events  │  │ • Outbox  │  │   Machine │  │ • Cache   │  │ • WebSock │
-│ • Roles   │  │ • Status  │  │ • Events  │  │ • Webhook │  │ • Stats   │  │ • Push    │
-│ (×2)      │  │ (×2)      │  │ (×3)      │  │ (×2)      │  │ (×2)      │  │ (×2)      │
-└─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘
-      │              │              │              │              │              │
-      └──────────────┴──────────────┼──────────────┴──────────────┴──────────────┘
-                                    │
-        ┌───────────────────────────┼───────────────────────────┐
-        │                           │                           │
-        ▼                           ▼                           ▼
-┌───────────────┐         ┌─────────────────┐         ┌─────────────────┐
-│  PostgreSQL   │         │      Redis      │         │  Redis Pub/Sub  │
-│   Port:5432   │         │   Port: 6379    │         │   Event Bus     │
-│ ───────────── │         │ ─────────────── │         │ ─────────────── │
-│ • Users       │         │ • Idempotency   │         │ • pledge.created│
-│ • Campaigns   │         │ • Session Cache │         │ • pledge.done   │
-│ • Pledges     │         │ • Totals Cache  │         │ • payment.auth  │
-│ • Payments    │         │ • Locks         │         │ • payment.done  │
-│ • Outbox      │         │                 │         │                 │
-└───────────────┘         └─────────────────┘         └─────────────────┘
-```
+![CareForAll Architecture](assets/photo_2025-11-21_17-28-33.jpg)
 
 ### Core Pattern: Transactional Outbox (Prevents Lost Donations)
 
