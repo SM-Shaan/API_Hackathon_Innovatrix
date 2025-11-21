@@ -19,10 +19,12 @@ POST {{baseUrl}}/users/register
 Content-Type: application/json
 
 {
-  "email": "admin@careforall.com",
-  "password": "admin",
-  "name": "Admin"
+  "email": "Fahad@careforall.com",
+  "password": "Fahad",
+  "name": "Fahad"
 }
+
+# eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0YTljYjk0YS1mYTMwLTQzYmUtOTk0OS1jZGQzZTY3YmRjNmYiLCJlbWFpbCI6IkZhaGFkQGNhcmVmb3JhbGwuY29tIiwicm9sZSI6IkRPTk9SIiwiaWF0IjoxNzYzNzE2Njk5LCJleHAiOjE3NjM4MDMwOTl9.7sYsC11jzGKhwI05xqo9BUcxVJDgLXCNjXhDG2Hydgc
 
 ### Login User (Save token for @userToken)
 POST {{baseUrl}}/users/login
@@ -268,36 +270,111 @@ GET {{baseUrl}}/donors/top?limit=5
 Authorization: Bearer {{userToken}}
 
 ###
-# 6. NOTIFICATION TESTING
+# 6. NOTIFICATION SERVICE TESTING
+# ============================================
+# Prerequisites:
+# 1. Start MailHog: docker-compose up -d mailhog
+# 2. View emails at: http://localhost:8025
+# ============================================
 ###
 
-### Trigger Welcome Email (Internal)
-POST {{baseUrl}}/notifications/email
-Authorization: Bearer {{adminToken}}
+### 6.1 Check Notification Service Health
+GET {{baseUrl}}/notifications/stats
+
+### 6.2 Send Manual Email Notification
+# This will be captured by MailHog - view at http://localhost:8025
+POST {{baseUrl}}/notifications/send
 Content-Type: application/json
 
 {
-  "to": "test@example.com",
-  "template": "welcome",
-  "data": {
-    "name": "Test User"
+  "email": "test@example.com",
+  "type": "EMAIL",
+  "subject": "Welcome to CareForAll!",
+  "content": "<div style='font-family: Arial; padding: 20px;'><h1 style='color: #667eea;'>Welcome!</h1><p>Thank you for joining CareForAll. Start making a difference today!</p></div>",
+  "channel": "welcome"
+}
+
+### 6.3 Send Donation Confirmation Notification
+POST {{baseUrl}}/notifications/send
+Content-Type: application/json
+
+{
+  "email": "donor@example.com",
+  "type": "EMAIL",
+  "subject": "Thank you for your donation!",
+  "content": "<div style='font-family: Arial; padding: 20px;'><h1 style='color: #667eea;'>Donation Received!</h1><p>Thank you for donating <strong>$100</strong> to <strong>Help Flood Victims</strong>.</p><p>Your generosity makes a real difference!</p></div>",
+  "channel": "donation",
+  "metadata": {
+    "amount": 100,
+    "campaign": "Help Flood Victims",
+    "pledgeId": "{{pledgeId}}"
   }
 }
 
-### Trigger Donation Confirmation Email
-POST {{baseUrl}}/notifications/email  
-Authorization: Bearer {{adminToken}}
+### 6.4 Send WebSocket Notification (Real-time)
+POST {{baseUrl}}/notifications/send
 Content-Type: application/json
 
 {
-  "to": "donor@example.com",
-  "template": "donation_confirmation",
-  "data": {
-    "donor_name": "John Donor",
-    "amount": 100,
-    "campaign_title": "Help Flood Victims",
-    "pledge_id": "{{pledgeId}}"
+  "email": "user@example.com",
+  "userId": "{{userId}}",
+  "type": "WEBSOCKET",
+  "subject": "New Donation Alert",
+  "content": "Someone just donated $50 to your campaign!",
+  "channel": "campaign_update",
+  "metadata": {
+    "campaignId": "{{campaignId}}",
+    "amount": 50
   }
+}
+
+### 6.5 Get Notifications by Email
+GET {{baseUrl}}/notifications?email=donor@example.com&limit=10
+
+### 6.6 Get Notifications by User ID
+GET {{baseUrl}}/notifications?userId=afbe61f9-acfa-436d-9230-263735e6a702&limit=10
+
+### 6.7 Get Unread Notification Count
+GET {{baseUrl}}/notifications/unread/count?userId=afbe61f9-acfa-436d-9230-263735e6a702
+
+### 6.8 Mark Single Notification as Read
+# Replace NOTIFICATION_ID with actual ID from previous responses
+POST {{baseUrl}}/notifications/NOTIFICATION_ID/read
+
+### 6.9 Mark All Notifications as Read
+POST {{baseUrl}}/notifications/read-all
+Content-Type: application/json
+
+{
+  "userId": "afbe61f9-acfa-436d-9230-263735e6a702"
+}
+
+### 6.10 Test Complete Donation Flow with Notification
+# Step 1: Create a pledge
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: notification-test-{{$timestamp}}
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 250,
+  "donor_name": "Notification Test User",
+  "donor_email": "notif-test@example.com",
+  "message": "Testing notification flow"
+}
+
+### 6.11 Campaign Goal Reached Notification (Admin Trigger)
+# Simulates the campaign reaching its goal
+POST {{baseUrl}}/notifications/send
+Content-Type: application/json
+
+{
+  "email": "campaign-owner@example.com",
+  "type": "EMAIL",
+  "subject": "Your campaign reached its goal!",
+  "content": "<div style='font-family: Arial; padding: 20px; text-align: center;'><h1 style='color: #28a745;'>Congratulations!</h1><p>Your campaign <strong>Help Flood Victims</strong> has reached its funding goal!</p><div style='font-size: 48px; color: #667eea; margin: 20px 0;'>$50,000</div><p>Thank you for making a difference!</p></div>",
+  "channel": "campaign_milestone"
 }
 
 ###
