@@ -4,9 +4,9 @@
 ###
 
 @baseUrl = http://localhost:8081/api
-@adminToken = 
-@userToken = 
-@campaignId = 
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzE3YWVlMS0wZWU3LTRjMGQtOTI1ZC0yZjAwMDExNmNhNDMiLCJlbWFpbCI6ImFkbWluQGNhcmVmb3JhbGwuY29tIiwicm9sZSI6IkRPTk9SIiwiaWF0IjoxNzYzNzAzMjUyLCJleHAiOjE3NjM3ODk2NTJ9.eVYrnaJgGn253tHc-RoR_zvlYLNZ9x7B0mTyoQKl7hg
+@userToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNWI1MzliZi1lMjQyLTRmOWUtYTE0Ny00MDQ2ZTZkMmNmNzkiLCJlbWFpbCI6ImRvbm9yQGV4YW1wbGUuY29tIiwicm9sZSI6IkRPTk9SIiwiaWF0IjoxNzYzNzAzMTU1LCJleHAiOjE3NjM3ODk1NTV9.LgyVHS_ccrDISBdADgI6Op5H4sJTJxwa45Nw-A1jIy0
+@campaignId = 81624487-ee16-416d-a93b-b1b078bf7ee8
 @pledgeId = 
 @paymentId = 
 
@@ -19,14 +19,15 @@ POST {{baseUrl}}/users/register
 Content-Type: application/json
 
 {
-  "email": "donor@example.com",
-  "password": "password123",
-  "name": "John Donor"
+  "email": "admin@careforall.com",
+  "password": "admin",
+  "name": "Admin"
 }
 
 ### Login User (Save token for @userToken)
 POST {{baseUrl}}/users/login
 Content-Type: application/json
+
 
 {
   "email": "donor@example.com",
@@ -39,12 +40,12 @@ Content-Type: application/json
 
 {
   "email": "admin@careforall.com",
-  "password": "admin123"
+  "password": "admin"
 }
 
 ### Get Current User Profile
 GET {{baseUrl}}/users/profile
-Authorization: Bearer {{userToken}}
+Authorization: Bearer {{adminToken}}
 
 ### Update User Profile
 PUT {{baseUrl}}/users/profile
@@ -68,7 +69,7 @@ Content-Type: application/json
 {
   "title": "Help Flood Victims",
   "description": "Emergency relief for flood-affected families in Bangladesh. Your donation will provide food, shelter, and medical aid.",
-  "goal": 50000,
+  "goal_amount": 50000,
   "category": "EMERGENCY",
   "end_date": "2024-12-31T23:59:59Z",
   "image_url": "https://example.com/flood-relief.jpg"
