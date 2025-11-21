@@ -1,0 +1,53 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and tag all services
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          # Build each service with version tag
+          docker build -t careforall/user-service:${VERSION} ./services/user-service
+          docker build -t careforall/campaign-service:${VERSION} ./services/campaign-service
+          docker build -t careforall/pledge-service:${VERSION} ./services/pledge-service
+          docker build -t careforall/payment-service:${VERSION} ./services/payment-service
+          docker build -t careforall/totals-service:${VERSION} ./services/totals-service
+          docker build -t careforall/notification-service:${VERSION} ./services/notification-service
+          docker build -t careforall/gateway:${VERSION} ./gateway
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## CareForAll Release ${{ steps.version.outputs.VERSION }}
+
+            ### Services
+            - User Service: ${{ steps.version.outputs.VERSION }}
+            - Campaign Service: ${{ steps.version.outputs.VERSION }}
+            - Pledge Service: ${{ steps.version.outputs.VERSION }}
+            - Payment Service: ${{ steps.version.outputs.VERSION }}
+            - Totals Service: ${{ steps.version.outputs.VERSION }}
+            - Notification Service: ${{ steps.version.outputs.VERSION }}
+            - API Gateway: ${{ steps.version.outputs.VERSION }}
+
+            ### Docker Images
+            All images are tagged with version `${{ steps.version.outputs.VERSION }}`
+          draft: false
+          prerelease: false
