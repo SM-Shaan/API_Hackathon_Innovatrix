@@ -155,6 +155,16 @@ services:
       - DB_PASSWORD=postgres
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=careforall-jwt-secret-change-in-production
+      # ============================================
+      # SMTP Configuration for Email Notifications
+      # ============================================
+      # Gmail SMTP (using App Password)
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_SECURE=false
+      - SMTP_USER=shanewazmahmud328@gmail.com
+      - SMTP_PASS=erkswmdfrghvejgz
+      - EMAIL_FROM=CareForAll <shanewazmahmud328@gmail.com>
     depends_on:
       postgres:
         condition: service_healthy
@@ -258,6 +268,57 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
+    networks:
+      - careforall-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Kibana for log visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - careforall-network
+    restart: unless-stopped
+
+  # Filebeat for log shipping
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    user: root
+    command: filebeat -e -strict.perms=false
+    volumes:
+      - ./observability/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - careforall-network
+    restart: unless-stopped
+
+  # Nginx Prometheus Exporter for gateway metrics
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    command:
+      - -nginx.scrape-uri=http://gateway:80/nginx_status
+    ports:
+      - "9113:9113"
+    depends_on:
+      - gateway
     networks:
       - careforall-network
     restart: unless-stopped
