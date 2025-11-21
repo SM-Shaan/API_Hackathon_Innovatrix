@@ -2,6 +2,8 @@
 
 A bulletproof, scalable donation platform built with modern microservices architecture to solve the chaos that destroyed the original system.
 
+> 📖 **New to this project?** Start with **[QUICK_START.md](./QUICK_START.md)** for a simple, step-by-step guide to running and testing the platform.
+
 ## 🚀 One-Click Startup
 
 ### **Option 1: Use the startup script**
