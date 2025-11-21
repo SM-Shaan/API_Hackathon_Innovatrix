@@ -60,7 +60,7 @@ export class EventSubscriber {
 
       case 'campaign.created':
         await this.totalsService.handleCampaignCreated(
-          event.payload.campaign?.id as string || event.aggregateId
+          (event.payload.campaign as any)?.id as string || event.aggregateId
         );
         break;
 
