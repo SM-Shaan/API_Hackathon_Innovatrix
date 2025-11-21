@@ -1,0 +1,45 @@
+### Test Stripe Integration
+
+### 1. Check Stripe Status
+GET http://localhost:3004/api/payments/stripe-status
+
+### 2. Create Test Payment (Stripe PaymentIntent)
+POST http://localhost:3004/api/payments/test-stripe
+Content-Type: application/json
+
+{
+  "amount": 2500,
+  "currency": "usd",
+  "description": "Test donation payment"
+}
+
+### 3. Create Regular Payment (with idempotency)
+POST http://localhost:3004/api/payments
+Content-Type: application/json
+
+{
+  "pledge_id": "test-pledge-001",
+  "amount": 5000,
+  "currency": "usd",
+  "idempotency_key": "test-key-001",
+  "donor_email": "donor@test.com",
+  "campaign_id": "test-campaign-001"
+}
+
+### 4. Get Payment by ID
+GET http://localhost:3004/api/payments/{payment_id}
+
+### 5. Simulate Webhook (for testing without real Stripe events)
+POST http://localhost:3004/api/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "evt_test_001",
+  "event_type": "payment_intent.succeeded",
+  "provider": "stripe",
+  "provider_payment_id": "pi_test_123456",
+  "amount": 5000
+}
+
+### 6. Check Health
+GET http://localhost:3004/health
