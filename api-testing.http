@@ -475,6 +475,363 @@ Content-Type: application/json
 }
 
 ###
+# 13. FAILURE SCENARIO TESTING (Corner Cases)
+###
+
+### ============================================
+### TEST: Duplicate Webhook Idempotency
+### Expected: Return cached response, no double processing
+### ============================================
+
+### First webhook (should process normally)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_idempotency_test_001",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_idempotency_test_001",
+  "amount": 150,
+  "metadata": {
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+### Duplicate webhook (same webhook_id - should return cached, NOT process again)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_idempotency_test_001",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_idempotency_test_001",
+  "amount": 150,
+  "metadata": {
+    "pledge_id": "{{pledgeId}}"
+  }
+}
+
+### ============================================
+### TEST: Out-of-Order Webhooks
+### Expected: CAPTURED before AUTHORIZED should be rejected
+### ============================================
+
+### Create a fresh pledge for out-of-order testing
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: out-of-order-test-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 200,
+  "donor_name": "Out of Order Test",
+  "donor_email": "outoforder@test.com",
+  "anonymous": false
+}
+
+### Send CAPTURED webhook BEFORE AUTHORIZED (Invalid - should fail)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_outoforder_captured",
+  "event_type": "payment_intent.captured",
+  "provider": "stripe",
+  "provider_payment_id": "pi_outoforder_test_001",
+  "amount": 200,
+  "metadata": {
+    "pledge_id": "out-of-order-pledge-id"
+  }
+}
+
+### Send COMPLETED webhook BEFORE AUTHORIZED (Invalid - should fail)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_outoforder_completed",
+  "event_type": "payment_intent.succeeded",
+  "provider": "stripe",
+  "provider_payment_id": "pi_outoforder_test_002",
+  "amount": 200
+}
+
+### ============================================
+### TEST: Backward State Transition
+### Expected: CAPTURED → AUTHORIZED should be rejected
+### ============================================
+
+### Step 1: Create pledge and process normally to CAPTURED state
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: backward-state-test-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 300,
+  "donor_name": "Backward State Test",
+  "donor_email": "backward@test.com"
+}
+
+### Step 2: Authorize the payment
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_backward_auth",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_backward_test_001",
+  "amount": 300
+}
+
+### Step 3: Capture the payment
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_backward_capture",
+  "event_type": "payment_intent.captured",
+  "provider": "stripe",
+  "provider_payment_id": "pi_backward_test_001",
+  "amount": 300
+}
+
+### Step 4: Try to go BACKWARD to AUTHORIZED (INVALID - should fail!)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_backward_invalid",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_backward_test_001",
+  "amount": 300
+}
+
+### ============================================
+### TEST: Rate Limiting
+### Expected: After threshold, return 429 Too Many Requests
+### Run this multiple times rapidly to trigger rate limit
+### ============================================
+
+### Rate limit test request (run 50+ times rapidly)
+GET {{baseUrl}}/campaigns
+Authorization: Bearer {{userToken}}
+
+### Rate limit test - webhook endpoint
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_ratelimit_{{$randomUUID}}",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_ratelimit_{{$randomUUID}}"
+}
+
+### ============================================
+### TEST: Invalid State Transitions Matrix
+### ============================================
+
+### PENDING → COMPLETED (Invalid - must go through AUTHORIZED & CAPTURED)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_skip_states_001",
+  "event_type": "payment_intent.succeeded",
+  "provider": "stripe",
+  "provider_payment_id": "pi_fresh_pending_001"
+}
+
+### FAILED → AUTHORIZED (Invalid - FAILED is terminal state)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_revive_failed_001",
+  "event_type": "payment_intent.authorized",
+  "provider": "stripe",
+  "provider_payment_id": "pi_already_failed_001"
+}
+
+### COMPLETED → CAPTURED (Invalid - COMPLETED is terminal state)
+POST {{baseUrl}}/payments/webhook
+Content-Type: application/json
+
+{
+  "webhook_id": "wh_after_complete_001",
+  "event_type": "payment_intent.captured",
+  "provider": "stripe",
+  "provider_payment_id": "pi_already_completed_001"
+}
+
+### ============================================
+### TEST: Concurrent Duplicate Requests
+### Expected: Only ONE should process, others return cached
+### ============================================
+
+### Concurrent test 1 (same idempotency key)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: concurrent-test-same-key
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "Concurrent Test 1",
+  "donor_email": "concurrent1@test.com"
+}
+
+### Concurrent test 2 (same idempotency key - should return cached)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: concurrent-test-same-key
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "Concurrent Test 2",
+  "donor_email": "concurrent2@test.com"
+}
+
+### Concurrent test 3 (same idempotency key - should return cached)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: concurrent-test-same-key
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "Concurrent Test 3",
+  "donor_email": "concurrent3@test.com"
+}
+
+### ============================================
+### TEST: Negative Amount Attack
+### Expected: Validation error, prevent negative totals
+### ============================================
+
+### Try negative amount (should be rejected)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: negative-amount-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": -500,
+  "donor_name": "Hacker",
+  "donor_email": "hacker@test.com"
+}
+
+### Try zero amount (should be rejected)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: zero-amount-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 0,
+  "donor_name": "Zero Test",
+  "donor_email": "zero@test.com"
+}
+
+### Try extremely large amount (should be rejected or limited)
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: huge-amount-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 999999999999,
+  "donor_name": "Big Spender",
+  "donor_email": "bigspender@test.com"
+}
+
+### ============================================
+### TEST: SQL Injection Prevention
+### Expected: Input should be sanitized, no SQL execution
+### ============================================
+
+### SQL Injection in campaign search
+GET {{baseUrl}}/campaigns/search?q='; DROP TABLE campaigns; --
+Authorization: Bearer {{userToken}}
+
+### SQL Injection in donor name
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: sql-injection-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "'; DROP TABLE pledges; --",
+  "donor_email": "sql@test.com"
+}
+
+### ============================================
+### TEST: XSS Prevention
+### Expected: Script tags should be escaped/rejected
+### ============================================
+
+### XSS in campaign title
+POST {{baseUrl}}/campaigns
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "title": "<script>alert('XSS')</script>",
+  "description": "Test campaign",
+  "goal_amount": 1000,
+  "category": "TEST"
+}
+
+### XSS in donor message
+POST {{baseUrl}}/pledges
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: xss-test-001
+
+{
+  "campaign_id": "{{campaignId}}",
+  "amount": 100,
+  "donor_name": "XSS Test",
+  "donor_email": "xss@test.com",
+  "message": "<img src=x onerror=alert('XSS')>"
+}
+
+### ============================================
+### TEST: Authentication Edge Cases
+### ============================================
+
+### Expired token test (use an old/expired JWT)
+GET {{baseUrl}}/campaigns
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ0ZXN0IiwiZXhwIjoxNjAwMDAwMDAwfQ.invalid
+
+### Malformed token test
+GET {{baseUrl}}/campaigns
+Authorization: Bearer not.a.valid.jwt.token
+
+### Empty token test
+GET {{baseUrl}}/campaigns
+Authorization: Bearer
+
+### Missing Authorization header
+GET {{baseUrl}}/users/profile
+
+###
 # NOTES:
 # 1. Replace {{variableName}} with actual values from responses
 # 2. Save tokens from login responses to use in subsequent requests
