@@ -67,7 +67,6 @@ jobs:
 
   test-shared:
     needs: detect-changes
-    if: needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
