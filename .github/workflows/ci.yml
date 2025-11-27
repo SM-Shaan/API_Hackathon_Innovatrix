@@ -84,7 +84,6 @@ jobs:
 
   test-user-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.user-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -102,7 +101,6 @@ jobs:
 
   test-campaign-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.campaign-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -120,7 +118,6 @@ jobs:
 
   test-pledge-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.pledge-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -138,7 +135,6 @@ jobs:
 
   test-payment-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.payment-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -156,7 +152,6 @@ jobs:
 
   test-totals-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.totals-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -174,7 +169,6 @@ jobs:
 
   test-notification-service:
     needs: [detect-changes, test-shared]
-    if: always() && (needs.detect-changes.outputs.notification-service == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event.inputs.run_all_tests == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -192,7 +186,6 @@ jobs:
 
   build-images:
     needs: [detect-changes, test-shared, test-user-service, test-campaign-service, test-pledge-service, test-payment-service, test-totals-service, test-notification-service]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
