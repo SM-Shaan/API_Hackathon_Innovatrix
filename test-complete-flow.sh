@@ -4,6 +4,66 @@ echo "🚀 TESTING COMPLETE DONATION PLATFORM INTEGRATION"
 echo "================================================="
 echo ""
 
+# JSON parsing function using Python (replaces jq)
+json_pretty() {
+    python -c "import json,sys; print(json.dumps(json.loads(sys.stdin.read()), indent=2))" 2>/dev/null || echo "$1"
+}
+
+json_get() {
+    # Usage: echo "$JSON" | json_get "key" or json_get "key.subkey"
+    python -c "
+import json,sys
+data = json.loads(sys.stdin.read())
+keys = '$1'.split('.')
+for k in keys:
+    if isinstance(data, dict):
+        data = data.get(k, '')
+    else:
+        data = ''
+        break
+print(data if data else '')
+" 2>/dev/null
+}
+
+json_get_nested() {
+    # For complex nested paths like .user.id
+    python -c "
+import json,sys
+try:
+    data = json.loads(sys.stdin.read())
+    keys = '$1'.split('.')
+    for k in keys:
+        if k and isinstance(data, dict):
+            data = data.get(k, {})
+        elif not k:
+            continue
+        else:
+            data = ''
+            break
+    print(data if data and data != {} else '')
+except:
+    print('')
+" 2>/dev/null
+}
+
+json_format_transactions() {
+    python -c "
+import json,sys
+try:
+    data = json.loads(sys.stdin.read())
+    transactions = data.get('transactions', [])
+    for t in transactions:
+        print(json.dumps({
+            'amount': t.get('amount'),
+            'type': t.get('type'),
+            'description': t.get('description'),
+            'created_at': t.get('created_at')
+        }, indent=2))
+except Exception as e:
+    print('No transactions found')
+" 2>/dev/null
+}
+
 # Test configuration
 USER_EMAIL="john.doe@example.com"
 USER_PASSWORD="securePassword123"
@@ -21,7 +81,7 @@ echo ""
 echo "=== STEP 1: USER REGISTRATION WITH WALLET ==="
 echo "📝 Registering new user..."
 
-USER_RESPONSE=$(curl -s -X POST http://localhost:8080/api/users/register \
+USER_RESPONSE=$(curl -s -X POST http://localhost:8081/api/users/register \
   -H "Content-Type: application/json" \
   -d "{
     \"email\": \"$USER_EMAIL\",
@@ -31,11 +91,11 @@ USER_RESPONSE=$(curl -s -X POST http://localhost:8080/api/users/register \
   }")
 
 echo "User Registration Response:"
-echo "$USER_RESPONSE" | jq
+echo "$USER_RESPONSE" | json_pretty
 
 # Extract user ID and token
-USER_ID=$(echo "$USER_RESPONSE" | jq -r '.user.id // empty')
-AUTH_TOKEN=$(echo "$USER_RESPONSE" | jq -r '.token // empty')
+USER_ID=$(echo "$USER_RESPONSE" | json_get_nested "user.id")
+AUTH_TOKEN=$(echo "$USER_RESPONSE" | json_get "token")
 
 if [ -z "$USER_ID" ] || [ -z "$AUTH_TOKEN" ]; then
     echo "❌ User registration failed!"
@@ -58,20 +118,21 @@ if [ -n "$PAYMENT_CONTAINER" ]; then
     echo "Using payment container: $PAYMENT_CONTAINER"
     WALLET_RESPONSE=$(docker exec $PAYMENT_CONTAINER wget -qO- \
         http://localhost:3004/api/payments/wallet/$USER_ID 2>/dev/null || echo '{"error": "Not found"}')
-    
+
     echo "Wallet Check Response:"
-    echo "$WALLET_RESPONSE" | jq
-    
-    WALLET_BALANCE=$(echo "$WALLET_RESPONSE" | jq -r '.wallet.balance // "0"')
+    echo "$WALLET_RESPONSE" | json_pretty
+
+    WALLET_BALANCE=$(echo "$WALLET_RESPONSE" | json_get_nested "wallet.balance")
     echo ""
-    if [ "$WALLET_BALANCE" != "0" ] && [ "$WALLET_BALANCE" != "null" ]; then
-        echo "✅ Wallet found with balance: \$$(echo \"scale=2; $WALLET_BALANCE / 100\" | bc)"
+    if [ -n "$WALLET_BALANCE" ] && [ "$WALLET_BALANCE" != "0" ] && [ "$WALLET_BALANCE" != "null" ]; then
+        BALANCE_DOLLARS=$(python -c "print(f'{int($WALLET_BALANCE)/100:.2f}')")
+        echo "✅ Wallet found with balance: \$$BALANCE_DOLLARS"
     else
         echo "⚠️  Wallet not found, creating manually..."
         docker exec $PAYMENT_CONTAINER wget -qO- \
             --header="Content-Type: application/json" \
             --post-data="{\"user_id\": \"$USER_ID\", \"initial_balance\": 10000}" \
-            http://localhost:3004/api/payments/wallet/create | jq
+            http://localhost:3004/api/payments/wallet/create | json_pretty
     fi
 else
     echo "⚠️  Payment service container not found, continuing..."
@@ -83,7 +144,7 @@ echo ""
 echo "=== STEP 3: ENSURE CAMPAIGN EXISTS ==="
 echo "🏥 Creating/checking test campaign..."
 
-CAMPAIGN_RESPONSE=$(curl -s -X POST http://localhost:8080/api/campaigns \
+CAMPAIGN_RESPONSE=$(curl -s -X POST http://localhost:8081/api/campaigns \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -d "{
@@ -96,7 +157,7 @@ CAMPAIGN_RESPONSE=$(curl -s -X POST http://localhost:8080/api/campaigns \
   }")
 
 echo "Campaign Response:"
-echo "$CAMPAIGN_RESPONSE" | jq
+echo "$CAMPAIGN_RESPONSE" | json_pretty
 
 echo ""
 
@@ -104,7 +165,7 @@ echo ""
 echo "=== STEP 4: MAKE DONATION (FULL FLOW) ==="
 echo "❤️  Making donation of \$25.00..."
 
-DONATION_RESPONSE=$(curl -s -X POST http://localhost:8080/api/pledges \
+DONATION_RESPONSE=$(curl -s -X POST http://localhost:8081/api/pledges \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $AUTH_TOKEN" \
   -d "{
@@ -116,9 +177,9 @@ DONATION_RESPONSE=$(curl -s -X POST http://localhost:8080/api/pledges \
   }")
 
 echo "Donation Response:"
-echo "$DONATION_RESPONSE" | jq
+echo "$DONATION_RESPONSE" | json_pretty
 
-PLEDGE_ID=$(echo "$DONATION_RESPONSE" | jq -r '.pledge.id // empty')
+PLEDGE_ID=$(echo "$DONATION_RESPONSE" | json_get_nested "pledge.id")
 
 if [ -n "$PLEDGE_ID" ]; then
     echo ""
@@ -139,38 +200,39 @@ sleep 3
 # Check payment status
 if [ -n "$PAYMENT_CONTAINER" ]; then
     echo "🔍 Checking payment status for pledge $PLEDGE_ID..."
-    
+
     # Look for payment by checking recent payments
     PAYMENT_RESPONSE=$(docker exec $PAYMENT_CONTAINER wget -qO- \
         "http://localhost:3004/api/payments/pledge/$PLEDGE_ID" 2>/dev/null || echo '{"error": "Not found"}')
-    
+
     echo "Payment Status:"
-    echo "$PAYMENT_RESPONSE" | jq
-    
+    echo "$PAYMENT_RESPONSE" | json_pretty
+
     # Check updated wallet balance
     echo ""
     echo "💳 Checking updated wallet balance..."
     UPDATED_WALLET=$(docker exec $PAYMENT_CONTAINER wget -qO- \
         http://localhost:3004/api/payments/wallet/$USER_ID 2>/dev/null || echo '{"error": "Not found"}')
-    
+
     echo "Updated Wallet:"
-    echo "$UPDATED_WALLET" | jq
-    
-    NEW_BALANCE=$(echo "$UPDATED_WALLET" | jq -r '.wallet.balance // "0"')
-    if [ "$NEW_BALANCE" != "0" ] && [ "$NEW_BALANCE" != "null" ]; then
+    echo "$UPDATED_WALLET" | json_pretty
+
+    NEW_BALANCE=$(echo "$UPDATED_WALLET" | json_get_nested "wallet.balance")
+    if [ -n "$NEW_BALANCE" ] && [ "$NEW_BALANCE" != "0" ] && [ "$NEW_BALANCE" != "null" ]; then
         echo ""
-        echo "💰 New wallet balance: \$$(echo \"scale=2; $NEW_BALANCE / 100\" | bc)"
-        SPENT=$(echo "scale=2; (10000 - $NEW_BALANCE) / 100" | bc)
+        NEW_BALANCE_DOLLARS=$(python -c "print(f'{int($NEW_BALANCE)/100:.2f}')")
+        SPENT=$(python -c "print(f'{(10000 - int($NEW_BALANCE))/100:.2f}')")
+        echo "💰 New wallet balance: \$$NEW_BALANCE_DOLLARS"
         echo "💸 Amount spent: \$$SPENT"
     fi
-    
+
     # Check transaction history
     echo ""
     echo "📜 Transaction history:"
     TRANSACTIONS=$(docker exec $PAYMENT_CONTAINER wget -qO- \
         http://localhost:3004/api/payments/wallet/$USER_ID/transactions 2>/dev/null || echo '{"transactions":[]}')
-    
-    echo "$TRANSACTIONS" | jq '.transactions[] | {amount: .amount, type: .type, description: .description, created_at: .created_at}'
+
+    echo "$TRANSACTIONS" | json_format_transactions
 fi
 
 echo ""
@@ -179,10 +241,10 @@ echo ""
 echo "=== STEP 6: VERIFY CAMPAIGN TOTALS ==="
 echo "📊 Checking campaign totals..."
 
-TOTALS_RESPONSE=$(curl -s http://localhost:8080/api/totals/campaign/$CAMPAIGN_ID)
+TOTALS_RESPONSE=$(curl -s http://localhost:8081/api/totals/campaign/$CAMPAIGN_ID)
 
 echo "Campaign Totals:"
-echo "$TOTALS_RESPONSE" | jq
+echo "$TOTALS_RESPONSE" | json_pretty
 
 echo ""
 
@@ -190,11 +252,11 @@ echo ""
 echo "=== STEP 7: USER DONATION HISTORY ==="
 echo "📋 Getting user's donation history..."
 
-USER_PLEDGES=$(curl -s http://localhost:8080/api/pledges/donor/me \
+USER_PLEDGES=$(curl -s http://localhost:8081/api/pledges/donor/me \
   -H "Authorization: Bearer $AUTH_TOKEN")
 
 echo "User's Donations:"
-echo "$USER_PLEDGES" | jq
+echo "$USER_PLEDGES" | json_pretty
 
 echo ""
 echo "🎉 COMPLETE FLOW TEST FINISHED!"
@@ -202,7 +264,7 @@ echo "=============================="
 echo ""
 echo "📝 Summary:"
 echo "   1. ✅ User Registration (with wallet)"
-echo "   2. ✅ Campaign Creation"  
+echo "   2. ✅ Campaign Creation"
 echo "   3. ✅ Donation/Pledge Creation"
 echo "   4. ✅ Automatic Payment Processing"
 echo "   5. ✅ Wallet Balance Updates"

@@ -455,9 +455,17 @@ COMPLETED → REFUNDED (terminal)
 
 ## API Endpoints
 
+<<<<<<< HEAD
 ### Base URL: `http://localhost:8081/api`
 
 ### User Service (`/users`)
+=======
+### Base URL: `/api` (via API Gateway)
+
+> **Note:** Access through API Gateway on port `8081`. Internal services communicate via Docker network using service names.
+
+### User Service (`/api/users`)
+>>>>>>> fa9ec06ca1f81954e9df436856be76d923a49bcd
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
@@ -516,9 +524,22 @@ COMPLETED → REFUNDED (terminal)
 
 ### Health Check Endpoints
 
+<<<<<<< HEAD
 All services expose health endpoints:
 - `GET http://localhost:300X/health` - Returns service health status
 - `GET http://localhost:300X/metrics` - Prometheus metrics
+=======
+All services expose health endpoints (internal ports):
+
+| Service | Health Endpoint | Metrics Endpoint |
+|---------|-----------------|------------------|
+| User Service | `user-service:3001/health` | `user-service:3001/metrics` |
+| Campaign Service | `campaign-service:3002/health` | `campaign-service:3002/metrics` |
+| Pledge Service | `pledge-service:3003/health` | `pledge-service:3003/metrics` |
+| Payment Service | `payment-service:3004/health` | `payment-service:3004/metrics` |
+| Totals Service | `totals-service:3005/health` | `totals-service:3005/metrics` |
+| Notification Service | `notification-service:3006/health` | `notification-service:3006/metrics` |
+>>>>>>> fa9ec06ca1f81954e9df436856be76d923a49bcd
 
 ---
 
@@ -899,10 +920,65 @@ Features:
 
 ### Logging
 
+<<<<<<< HEAD
 Structured JSON logging with Pino:
 - Correlation IDs for request tracing
 - Log levels: info, warn, error, debug
 - Filebeat integration for log aggregation
+=======
+Structured JSON logging implemented with **Pino** across all services.
+
+**Implementation:** `services/*/src/logger.ts`
+
+```typescript
+// Logger Configuration
+import pino from 'pino';
+
+export const createLogger = (serviceName: string) => {
+  return pino({
+    name: serviceName,
+    level: process.env.LOG_LEVEL || 'info',
+    formatters: {
+      level: (label) => ({ level: label }),
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  });
+};
+```
+
+**Features:**
+- **Structured JSON output** - Machine-readable logs for aggregation
+- **Service identification** - Each log includes service name
+- **ISO timestamps** - Consistent time format across services
+- **Configurable log levels** - Set via `LOG_LEVEL` env variable
+- **Pretty printing** - Colorized output in development mode
+
+**Log Levels:**
+| Level | Usage |
+|-------|-------|
+| `error` | Errors that need immediate attention |
+| `warn` | Warning conditions |
+| `info` | General operational information |
+| `debug` | Detailed debugging information |
+
+**Example Log Output:**
+```json
+{
+  "level": "info",
+  "time": "2025-11-21T12:00:00.000Z",
+  "name": "pledge-service",
+  "msg": "Pledge created successfully",
+  "pledgeId": "uuid-here",
+  "campaignId": "uuid-here"
+}
+```
+
+**Environment Variables:**
+```bash
+LOG_LEVEL=info    # Options: error, warn, info, debug
+NODE_ENV=production  # Disables pretty printing in production
+```
+>>>>>>> fa9ec06ca1f81954e9df436856be76d923a49bcd
 
 ---
 
@@ -931,6 +1007,125 @@ upstream user_service {
 }
 ```
 
+<<<<<<< HEAD
+=======
+## Logging & Tracing
+
+### Logging Architecture
+
+All services use **Pino** for structured JSON logging with the following configuration:
+
+**Logger Setup** (`services/*/src/logger.ts`):
+```typescript
+import pino from 'pino';
+
+export const createLogger = (serviceName: string) => {
+  return pino({
+    name: serviceName,
+    level: process.env.LOG_LEVEL || 'info',
+    formatters: {
+      level: (label) => ({ level: label }),
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  });
+};
+```
+
+**Log Levels:**
+| Level | Use Case |
+|-------|----------|
+| `error` | Errors requiring immediate attention |
+| `warn` | Warning conditions |
+| `info` | General operational information |
+| `debug` | Detailed debugging information |
+
+**Configuration:**
+- Set via `LOG_LEVEL` environment variable
+- Pretty printing disabled in production (`NODE_ENV=production`)
+- ISO 8601 timestamps for consistency
+- Service name included in all logs
+
+### Distributed Tracing with OpenTelemetry
+
+**Tracing Setup** (`services/*/src/tracing.ts`):
+```typescript
+import { NodeTracerProvider } from '@opentelemetry/node';
+import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
+import { SimpleSpanProcessor } from '@opentelemetry/tracing';
+
+const jaegerExporter = new JaegerExporter({
+  endpoint: process.env.JAEGER_ENDPOINT || 'http://jaeger:14268/api/traces',
+});
+
+const tracerProvider = new NodeTracerProvider();
+tracerProvider.addSpanProcessor(new SimpleSpanProcessor(jaegerExporter));
+```
+
+**Key Metrics Tracked:**
+- Request entry/exit points
+- Database query execution
+- Redis operations
+- Service-to-service calls
+- Event publishing/consumption
+
+### Jaeger UI Integration
+
+Access distributed traces at **http://localhost:16686**
+
+**Features:**
+- Service dependency graph
+- Latency analysis by service
+- Error span identification
+- Trace search by service, operation, tags
+
+**Common Queries:**
+- Find slow requests: Filter by `duration > 1s`
+- Find errors: Filter by `error=true`
+- Service dependencies: View service graph
+- Trace specific user: Search by `user_id` tag
+
+### Log Aggregation (ELK Stack)
+
+**Elasticsearch Configuration:**
+- Stores all structured logs
+- Accessible at `http://localhost:9200`
+- 7-day retention policy
+
+**Kibana Dashboard:**
+- Access at **http://localhost:5601**
+- Pre-configured index pattern: `logs-*`
+- Log viewer and search interface
+
+**Example Kibana Queries:**
+```
+service: "pledge-service" AND level: "error"
+message: "Payment failed" AND status: 500
+campaignId: "uuid-123" AND trace_id: "*"
+```
+
+### Metrics & Monitoring
+
+**Prometheus Endpoints** (all services):
+- Format: `http://service-name:port/metrics`
+- Scrape interval: 15 seconds
+- Retention: 15 days
+
+**Key Metrics by Service:**
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | method, route, status |
+| `http_request_duration_seconds` | Histogram | method, route |
+| `db_query_duration_seconds` | Histogram | query_type, service |
+| `redis_operation_duration_seconds` | Histogram | operation, key_pattern |
+| `event_publish_total` | Counter | event_type, service |
+
+**Grafana Dashboard Access:**
+- URL: **http://localhost:3000**
+- Default credentials: `admin` / `admin`
+- Pre-built dashboards included
+
+>>>>>>> fa9ec06ca1f81954e9df436856be76d923a49bcd
 ---
 
 ## Service Replicas

@@ -243,7 +243,7 @@ sequenceDiagram
                 OutboxWorker->>PledgeDB: UPDATE processed_at = NOW()
                 OutboxWorker->>Redis: Update metrics
             else Publish failure
-                OutboxWorker->>OutboxWorker: Log error, retry next cycle
+                OutboxWorker->>OutboxWorker: kerror, retry next cycle
             end
         end
     end
